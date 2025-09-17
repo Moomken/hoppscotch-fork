@@ -94,7 +94,6 @@ services:
 
   # The service that spins up all services at once in one container
   hoppscotch-aio:
-    profiles: ["default"]
     container_name: hoppscotch-aio
     restart: unless-stopped
     build:
