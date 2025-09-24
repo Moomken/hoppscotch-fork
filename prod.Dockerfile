@@ -43,7 +43,7 @@ RUN go build
 
 
 # Shared Node.js base with optimized NPM installation
-FROM alpine:3.22.1 AS node_base
+FROM node:22-alpine AS node_base
 RUN apk add --no-cache nodejs curl tini && \
   # Install NPM from source, as Alpine version is old and has dependency vulnerabilities
   # TODO: Find a better method which is resistant to supply chain attacks
