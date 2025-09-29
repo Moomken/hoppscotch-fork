@@ -42,14 +42,8 @@ RUN go build
 
 
 
-# Shared Node.js base with optimized NPM installation
 FROM node:22-alpine AS node_base
-RUN apk add --no-cache nodejs curl tini && \
-  # Install NPM from source, as Alpine version is old and has dependency vulnerabilities
-  # TODO: Find a better method which is resistant to supply chain attacks
-  curl -qL -o /tmp/install.sh https://www.npmjs.com/install.sh && \
-  sh /tmp/install.sh --npm_install=11.5.2 && \
-  rm /tmp/install.sh && \
+RUN apk add --no-cache curl tini && \
   npm install -g pnpm@10.15.0 @import-meta-env/cli
 
 
