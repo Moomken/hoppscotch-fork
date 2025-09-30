@@ -23,7 +23,9 @@ RUN case "${TARGETARCH}" in amd64) GOARCH=amd64 ;; arm64) GOARCH=arm64 ;; *) ech
 # Set up Go environment variables
 ENV PATH="/usr/local/go/bin:${PATH}" \
   GOPATH="/go" \
-  GOBIN="/go/bin"
+  GOBIN="/go/bin" \
+  GOPROXY=https://proxy.golang.org,direct \
+  GOSUMDB=sum.golang.org
 
 WORKDIR /tmp/caddy-build
 RUN tar xvf /tmp/caddy-build/src.tar.gz && \
@@ -44,6 +46,7 @@ RUN go build
 
 FROM node:22-alpine AS node_base
 RUN apk add --no-cache curl tini && \
+  npm config set registry https://registry.npmmirror.com && \
   npm install -g pnpm@10.15.0 @import-meta-env/cli
 
 
@@ -56,12 +59,10 @@ WORKDIR /usr/src/app
 ENV HOPP_ALLOW_RUNTIME_ENV=true
 
 COPY pnpm-lock.yaml .
-RUN pnpm fetch
+RUN pnpm fetch --retry 5 --fetch-timeout 60000
 
 COPY . .
 RUN pnpm install -f --prefer-offline
-
-
 
 FROM base_builder AS backend_builder
 WORKDIR /usr/src/app/packages/hoppscotch-backend
@@ -115,7 +116,6 @@ COPY --from=fe_builder /usr/src/app/packages/hoppscotch-selfhost-web/selfhost-we
 COPY --from=fe_builder /usr/src/app/packages/hoppscotch-selfhost-web/dist/ /site/selfhost-web
 
 WORKDIR /site
-# Run both webapp-server and Caddy after env processing (NOTE: env processing is required by both)
 CMD ["/bin/sh", "-c", "node /site/prod_run.mjs && (webapp-server & caddy run --config /etc/caddy/selfhost-web.Caddyfile --adapter caddyfile)"]
 
 EXPOSE 80
@@ -126,9 +126,9 @@ EXPOSE 3200
 
 FROM base_builder AS sh_admin_builder
 WORKDIR /usr/src/app/packages/hoppscotch-sh-admin
-# Generate two builds for `sh-admin`, one based on subpath-access and the regular build
 RUN pnpm run build --outDir dist-multiport-setup
 RUN pnpm run build --outDir dist-subpath-access --base /admin/
+
 
 
 FROM node_base AS sh_admin
@@ -150,30 +150,23 @@ EXPOSE 3100
 
 
 FROM node_base AS aio
-
-# Caddy install
 COPY --from=caddy_builder /tmp/caddy-build/cmd/caddy/caddy /usr/bin/caddy
 
 ENV PRODUCTION="true"
 ENV PORT=8080
 
-# Open Containers Initiative (OCI) labels - useful for bots like Renovate
 LABEL org.opencontainers.image.source="https://github.com/hoppscotch/hoppscotch" \
   org.opencontainers.image.url="https://docs.hoppscotch.io" \
   org.opencontainers.image.licenses="MIT"
 
-# Copy necessary files
-# Backend files
 COPY --from=base_builder /usr/src/app/packages/hoppscotch-backend/backend.Caddyfile /etc/caddy/backend.Caddyfile
 COPY --from=backend_builder /dist/backend /dist/backend
 COPY --from=base_builder /usr/src/app/packages/hoppscotch-backend/prod_run.mjs /dist/backend
 
-# Static Server
 COPY --from=webapp_server_builder /usr/src/app/packages/hoppscotch-selfhost-web/webapp-server/target/release/webapp-server /usr/local/bin/
 RUN mkdir -p /site/selfhost-web
 COPY --from=fe_builder /usr/src/app/packages/hoppscotch-selfhost-web/dist /site/selfhost-web
 
-# FE Files
 COPY --from=base_builder /usr/src/app/aio_run.mjs /usr/src/app/aio_run.mjs
 COPY --from=fe_builder /usr/src/app/packages/hoppscotch-selfhost-web/dist /site/selfhost-web
 COPY --from=sh_admin_builder /usr/src/app/packages/hoppscotch-sh-admin/dist-multiport-setup /site/sh-admin-multiport-setup
@@ -188,7 +181,6 @@ HEALTHCHECK --interval=2s CMD /bin/sh /healthcheck.sh
 WORKDIR /dist/backend
 CMD ["node", "/usr/src/app/aio_run.mjs"]
 
-# NOTE: Although these ports are exposed, the HOPP_ALTERNATE_AIO_PORT variable can be used to assign a user-specified port
 EXPOSE 3170
 EXPOSE 3000
 EXPOSE 3100
