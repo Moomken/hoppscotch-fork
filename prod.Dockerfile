@@ -59,7 +59,7 @@ WORKDIR /usr/src/app
 ENV HOPP_ALLOW_RUNTIME_ENV=true
 
 COPY pnpm-lock.yaml .
-RUN pnpm fetch --retry 5 --fetch-timeout 60000
+RUN pnpm fetch
 
 COPY . .
 RUN pnpm install -f --prefer-offline
