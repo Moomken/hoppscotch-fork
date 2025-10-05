@@ -36,7 +36,7 @@ services:
         condition: service_healthy
     ports:
       - "3080:80"     # web server
-      - "3000:3000"   # app
+      - "3001:3000"   # app
       - "3100:3100"   # self-host admin
       - "3170:3170"   # backend
       - "3200:3200"   # webapp server
